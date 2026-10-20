@@ -48,12 +48,18 @@
       .powerup-chip.pu-slow .pudot { background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); }
       .powerup-chip.pu-x2 .pudot { background: var(--color-gold); box-shadow: 0 0 8px var(--color-gold); }
       .powerup-chip.pu-magnet .pudot { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+      .powerup-chip.pu-turbo .pudot { background: #ff8ad8; box-shadow: 0 0 8px #ff8ad8; }
+
+      #desafio-chip { color: var(--color-gold); border-color: #ffc94d59; }
+      #desafio-chip.done { opacity: .85; }
 
       .pu-dot { border-radius: 50%; flex: none; width: 12px; height: 12px; }
       .pu-shield { background: var(--color-accent); box-shadow: 0 0 8px var(--color-accent); }
       .pu-slow { background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); }
       .pu-x2 { background: var(--color-gold); box-shadow: 0 0 8px var(--color-gold); }
       .pu-magnet { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+      .pu-turbo { background: #ff8ad8; box-shadow: 0 0 8px #ff8ad8; }
+      .pu-reparo { background: #ff9e64; box-shadow: 0 0 8px #ff9e64; }
 
       .menu-panels {
         display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);
@@ -165,6 +171,7 @@
           <div class="chip panel" id="discord-badge" title="Estado da integração Discord">
             <span class="dot" aria-hidden="true"></span><span id="discord-text">A iniciar…</span>
           </div>
+          <div class="chip panel" id="desafio-chip" title="Desafio de hoje — completo no bot e no jogo">🎯 <span id="desafio-nome">—</span></div>
           <div id="powerups" aria-label="Power-ups ativos"></div>
         </div>
         <div class="hud-bottom-right">
@@ -197,7 +204,10 @@
           <li><span class="pu-dot pu-slow" aria-hidden="true"></span> Câmera lenta</li>
           <li><span class="pu-dot pu-x2" aria-hidden="true"></span> Pontos <b>×2</b></li>
           <li><span class="pu-dot pu-magnet" aria-hidden="true"></span> Ímã de orbes</li>
+          <li><span class="pu-dot pu-turbo" aria-hidden="true"></span> Turbo <b>atravessa tudo</b></li>
+          <li><span class="pu-dot pu-reparo" aria-hidden="true"></span> Reparo <b>+1 vida</b></li>
         </ul>
+        <p class="controls-hint" id="desafio-hint"></p>
         <button class="btn-primary" id="btn-start">Começar</button>
         <p class="controls-hint">
           <b>Setas / WASD</b> para mover · <b>arrastar</b> no telemóvel · <b>P</b> pausa · <b>M</b> som

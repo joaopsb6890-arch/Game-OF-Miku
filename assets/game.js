@@ -20,9 +20,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const CONFIG = {
   // Application ID do teu app no Discord Developer Portal.
   // Deixa vazio para jogar só no navegador (o badge mostra o estado).
-  clientId: '1551238667492790352',
+  clientId: '',
   // Convite do teu servidor Discord. O ?proof= é anexado automaticamente.
-  invite: 'https://discord.gg/9apTx4xyJQ',
+  invite: 'https://discord.gg/SEU_CONVITE',
   // ✅ Linha de prova do Discord Social SDK (Claim Your Game / Game Identity)
   proof: 'c7396932d0aee5ce',
   // ID do servidor (guild) — quem fizer login e for membro ganha a skin dourada.
@@ -58,7 +58,28 @@ const POWERUPS = {
   slow: { nome: 'Câmera lenta', cor: 0x57e6ff },
   x2: { nome: 'Pontos ×2', cor: 0xffc94d },
   magnet: { nome: 'Ímã de orbes', cor: 0xff4466 },
+  turbo: { nome: 'Turbo — atravessa tudo!', cor: 0xff8ad8 },
+  repair: { nome: 'Reparo — +1 vida', cor: 0xff9e64 },
 };
+
+// 🎯 Desafio do dia — MESMA lista e MESMO índice do bot (cogs/orbita.py)
+const DESAFIO_BONUS = 500;
+const DESAFIOS = [
+  { nome: 'Colecionador de orbes', desc: 'Apanha 25 orbes numa partida', check: (g) => g.stats.orbs >= 25 },
+  { nome: 'Portões dourados', desc: 'Atravessa 5 portões numa partida', check: (g) => g.stats.gates >= 5 },
+  { nome: 'Onda 3', desc: 'Chega à onda 3', check: (g) => g.wave >= 3 },
+  { nome: 'Sobrevivente', desc: 'Fica 45 segundos vivo', check: (g) => g.elapsed >= 45 },
+  { nome: 'Pontuação alta', desc: 'Faz 1.500 pontos numa partida', check: (g) => g.score >= 1500 },
+  { nome: 'Combo mestre', desc: 'Alcança combo ×5', check: (g) => g.maxCombo >= 12 },
+  { nome: 'Energia pura', desc: 'Apanha 3 power-ups numa partida', check: (g) => g.stats.powerups >= 3 },
+];
+
+function desafioDeHoje() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  let soma = 0;
+  for (const c of hoje) soma += c.charCodeAt(0);
+  return { data: hoje, ...DESAFIOS[soma % DESAFIOS.length] };
+}
 
 const ACHIEVEMENTS = {
   decolar: { nome: 'Primeiro voo', desc: 'Começar uma partida' },
@@ -71,6 +92,7 @@ const ACHIEVEMENTS = {
   porteiro: { nome: 'Porteiro dourado', desc: 'Atravessar 10 portão(ões)' },
   power10: { nome: 'Energia pura', desc: 'Apanhar 10 power-up(s)' },
   blindado: { nome: 'Blindado', desc: 'Guardar 2 escudos ao mesmo tempo' },
+  desafio: { nome: 'Missão cumprida', desc: 'Completar o desafio do dia' },
 };
 
 /* ════════════════════════════════════════════════════════════════
@@ -84,6 +106,7 @@ const DEFAULTS = {
   top: [],
   totals: { orbs: 0, gates: 0, powerups: 0, runs: 0 },
   ach: {},
+  challenges: {},
 };
 
 function loadStore() {
@@ -94,10 +117,11 @@ function loadStore() {
       ...raw,
       totals: { ...DEFAULTS.totals, ...(raw.totals || {}) },
       ach: { ...DEFAULTS.ach, ...(raw.ach || {}) },
+      challenges: { ...DEFAULTS.challenges, ...(raw.challenges || {}) },
       top: Array.isArray(raw.top) ? raw.top : [],
     };
   } catch {
-    return { ...DEFAULTS, totals: { ...DEFAULTS.totals }, ach: {}, top: [] };
+    return { ...DEFAULTS, totals: { ...DEFAULTS.totals }, ach: {}, challenges: {}, top: [] };
   }
 }
 
@@ -337,6 +361,8 @@ function powerupGeometry(tipo) {
     case 'shield': return new THREE.TorusGeometry(0.55, 0.13, 10, 26);
     case 'slow': return new THREE.OctahedronGeometry(0.6, 0);
     case 'x2': return new THREE.DodecahedronGeometry(0.6, 0);
+    case 'turbo': return new THREE.ConeGeometry(0.55, 1.15, 10);
+    case 'repair': return new THREE.BoxGeometry(0.8, 0.8, 0.8);
     default: return new THREE.IcosahedronGeometry(0.6, 0);
   }
 }
@@ -364,6 +390,9 @@ class Game {
     this.slowTimer = 0;
     this.x2Timer = 0;
     this.magnetTimer = 0;
+    this.turboTimer = 0;
+    this.maxCombo = 0;
+    this.desafioFeito = !!store.challenges[desafioDeHoje().data];
     this.wave = 1;
     this.stats = { orbs: 0, gates: 0, powerups: 0, distance: 0 };
 
@@ -595,6 +624,9 @@ class Game {
     this.slowTimer = 0;
     this.x2Timer = 0;
     this.magnetTimer = 0;
+    this.turboTimer = 0;
+    this.maxCombo = 0;
+    this.desafioFeito = !!store.challenges[desafioDeHoje().data];
     this.wave = 1;
     this.stats = { orbs: 0, gates: 0, powerups: 0, distance: 0 };
     this.timers = { asteroid: 1.4, orb: 0.6, gate: 6, powerup: 10 };
@@ -725,6 +757,7 @@ class Game {
   registerCollect(pointsBase) {
     this.combo += 1;
     this.comboTimer = 4;
+    this.maxCombo = Math.max(this.maxCombo, this.combo);
     this.onUi.onCombo(this.multiplier(), this.combo);
     return this.addScore(pointsBase);
   }
@@ -744,6 +777,18 @@ class Game {
         break;
       case 'magnet':
         this.magnetTimer = 8;
+        break;
+      case 'turbo':
+        this.turboTimer = 5;
+        break;
+      case 'repair':
+        if (this.lives < 4) {
+          this.lives += 1;
+          this.onUi.onLives(this.lives);
+        } else {
+          this.score += 200;
+          this.onUi.onScore(this.score);
+        }
         break;
     }
     this.onUi.onPowerups(this);
@@ -786,6 +831,20 @@ class Game {
     this.onUi.onAchievement(info);
     this.audio.playAchieve();
     this.onUi.onAchievements();
+  }
+
+  checkDesafio() {
+    const hoje = desafioDeHoje();
+    if (store.challenges[hoje.data] || this.desafioFeito) return;
+    if (!hoje.check(this)) return;
+    this.desafioFeito = true;
+    store.challenges[hoje.data] = true;
+    saveStore();
+    this.score += DESAFIO_BONUS;
+    this.onUi.onScore(this.score);
+    this.onUi.onToast(`🎯 Desafio completo! +${DESAFIO_BONUS}`);
+    this.unlock('desafio');
+    this.onUi.onDesafio();
   }
 
   checkAchievements() {
@@ -839,16 +898,17 @@ class Game {
     this.slowTimer = Math.max(0, this.slowTimer - dt);
     this.x2Timer = Math.max(0, this.x2Timer - dt);
     this.magnetTimer = Math.max(0, this.magnetTimer - dt);
+    this.turboTimer = Math.max(0, this.turboTimer - dt);
     // Chips dos power-ups: re-render quando o estado muda e ~4×/s para o contador
     this._puHud = (this._puHud || 0) + dt;
     const temEfeitos = this.shieldCharges > 0 || this.slowTimer > 0
-      || this.x2Timer > 0 || this.magnetTimer > 0;
+      || this.x2Timer > 0 || this.magnetTimer > 0 || this.turboTimer > 0;
     if (temEfeitos !== this._puHudState || (temEfeitos && this._puHud >= 0.25)) {
       this._puHud = 0;
       this._puHudState = temEfeitos;
       this.onUi.onPowerups(this);
     }
-    const wdt = dt * (this.slowTimer > 0 ? 0.55 : 1);
+    const wdt = dt * (this.slowTimer > 0 ? 0.55 : 1) * (this.turboTimer > 0 ? 1.25 : 1);
 
     this.elapsed += wdt;
     this.speed = 30 + Math.min(36, this.elapsed * 0.5);
@@ -1006,17 +1066,27 @@ class Game {
       if (fora) {
         this.scene.remove(ast.mesh);
         this.asteroids.splice(i, 1);
-      } else if (this.invuln <= 0 && ast.mesh.position.distanceTo(this.shipPos) < ast.r + 0.78) {
-        this.scene.remove(ast.mesh);
-        this.asteroids.splice(i, 1);
-        this.burst(this.shipPos, COLOR_HIT, 20);
-        this.hit();
+      } else if (ast.mesh.position.distanceTo(this.shipPos) < ast.r + 0.78) {
+        if (this.turboTimer > 0) {
+          // 🚀 turbo: a nave atravessa os asteroides!
+          this.scene.remove(ast.mesh);
+          this.asteroids.splice(i, 1);
+          this.burst(ast.mesh.position, COLOR_GATE, 14);
+          this.addScore(10);
+          this.onUi.onScore(this.score);
+        } else if (this.invuln <= 0) {
+          this.scene.remove(ast.mesh);
+          this.asteroids.splice(i, 1);
+          this.burst(this.shipPos, COLOR_HIT, 20);
+          this.hit();
+        }
       }
     }
 
     this.updateDebris(wdt);
     this.updateCamera(dt, true);
     this.checkAchievements();
+    this.checkDesafio();
   }
 
   updateCamera(dt, tracking) {
@@ -1329,7 +1399,25 @@ function renderPowerups(game) {
   if (game.magnetTimer > 0) {
     chips.push(`<span class="powerup-chip pu-magnet"><span class="pudot"></span>🧲 ${Math.ceil(game.magnetTimer)}s</span>`);
   }
+  if (game.turboTimer > 0) {
+    chips.push(`<span class="powerup-chip pu-turbo"><span class="pudot"></span>🚀 ${Math.ceil(game.turboTimer)}s</span>`);
+  }
   ui.powerups.innerHTML = chips.join('');
+}
+
+function renderDesafio() {
+  const hoje = desafioDeHoje();
+  const feito = !!store.challenges[hoje.data];
+  const chip = $('desafio-chip');
+  if (chip) {
+    chip.hidden = false;
+    $('desafio-nome').textContent = feito ? `${hoje.nome} ✓` : hoje.nome;
+  }
+  const nota = $('desafio-hint');
+  if (nota) {
+    nota.innerHTML = `🎯 <b>Desafio de hoje:</b> ${hoje.desc} — <b>+${DESAFIO_BONUS}</b>`
+      + (feito ? ' <b>✅ concluído!</b>' : '');
+  }
 }
 
 function renderFinalStats(stats, wave) {
@@ -1415,6 +1503,7 @@ const game = new Game({
       }
     },
     onPowerups: renderPowerups,
+    onDesafio: renderDesafio,
     onWave(wave, nome) {
       showToast(`Onda ${wave} — ${nome}`);
     },
@@ -1530,6 +1619,7 @@ renderer.setAnimationLoop(() => {
 /* ── arranque ── */
 
 renderAchievements();
+renderDesafio();
 renderLeaderboard(ui.leaderboard);
 ui.menuBest.textContent = `Recorde: ${store.best}`;
 ui.best.textContent = store.best;
