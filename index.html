@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Órbita Rush — jogo 3D para Discord</title>
+    <meta
+      name="description"
+      content="Órbita Rush: desvia a nave de asteroides e apanha orbes de energia neste jogo 3D que corre dentro do Discord (Activity) ou em qualquer navegador."
+    />
+    <!-- ✅ Prova de domínio do Discord Social SDK (Claim Your Game / Game Identity) -->
+    <meta name="discord-proof" content="c7396932d0aee5ce" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="preconnect" href="https://api.fontshare.com" />
+    <link
+      href="https://api.fontshare.com/v2/css?f[]=clash-display@500,600,700&f[]=satoshi@400,500,700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" crossorigin href="./assets/index-Bly96P9v.css" />
+
+    <!-- three.js vem do CDN (o jogo roda online, dentro do Discord ou no navegador) -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <style>
+      /* ═══ Estilos extras dos novos sistemas (o resto continua no CSS base) ═══ */
+      .hud-bottom-left, .hud-bottom-right {
+        display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap;
+      }
+      #combo { color: var(--color-gold); border-color: #ffc94d59; }
+      #combo .hud-value { color: var(--color-gold); }
+
+      .powerup-chip {
+        display: inline-flex; align-items: center; gap: var(--space-2);
+        padding: var(--space-2) var(--space-3); font-size: var(--text-xs);
+        border-radius: 999px; background: var(--color-surface);
+        border: 1px solid var(--color-border); color: var(--color-text);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+      .powerup-chip .pudot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+      .powerup-chip.pu-shield .pudot { background: var(--color-accent); box-shadow: 0 0 8px var(--color-accent); }
+      .powerup-chip.pu-slow .pudot { background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); }
+      .powerup-chip.pu-x2 .pudot { background: var(--color-gold); box-shadow: 0 0 8px var(--color-gold); }
+      .powerup-chip.pu-magnet .pudot { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+
+      .pu-dot { border-radius: 50%; flex: none; width: 12px; height: 12px; }
+      .pu-shield { background: var(--color-accent); box-shadow: 0 0 8px var(--color-accent); }
+      .pu-slow { background: var(--color-primary); box-shadow: 0 0 8px var(--color-primary); }
+      .pu-x2 { background: var(--color-gold); box-shadow: 0 0 8px var(--color-gold); }
+      .pu-magnet { background: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+
+      .menu-panels {
+        display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3);
+        width: 100%;
+      }
+      .mini-panel {
+        padding: var(--space-3) var(--space-4); text-align: left;
+        display: flex; flex-direction: column; gap: var(--space-2); min-width: 0;
+      }
+      .mini-title {
+        font-family: var(--font-display); font-size: var(--text-sm);
+        color: var(--color-text); font-weight: 600;
+      }
+      .achievements, .leaderboard { list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+      .achievements li {
+        display: flex; align-items: center; gap: var(--space-2);
+        font-size: var(--text-xs); color: var(--color-text-muted);
+      }
+      .achievements li .ok { color: var(--color-accent); font-weight: 700; }
+      .achievements li .no { opacity: .45; }
+      .achievements li.done { color: var(--color-text); }
+      .leaderboard li {
+        display: flex; justify-content: space-between; gap: var(--space-2);
+        font-size: var(--text-xs); color: var(--color-text-muted);
+        font-variant-numeric: tabular-nums lining-nums;
+      }
+      .leaderboard li b { color: var(--color-primary); }
+      .leaderboard li.me { color: var(--color-text); }
+      .stats-grid {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2);
+        width: 100%;
+      }
+      .stat {
+        padding: var(--space-2); border-radius: 10px;
+        background: #ffffff0a; border: 1px solid var(--color-border);
+        display: flex; flex-direction: column; gap: 2px; align-items: center;
+      }
+      .stat .v { font-family: var(--font-display); font-size: var(--text-lg); color: var(--color-primary); font-weight: 700; }
+      .stat .l { font-size: var(--text-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .06em; }
+
+      .discord-link {
+        display: inline-flex; align-items: center; gap: var(--space-2);
+        text-decoration: none; border: 1px solid var(--color-border);
+        padding: var(--space-2) var(--space-4); border-radius: 999px;
+      }
+      .discord-link:hover { border-color: var(--color-primary); }
+
+      #achievement-banner {
+        position: fixed; top: 12%; left: 50%; transform: translateX(-50%);
+        z-index: 30; display: flex; align-items: center; gap: var(--space-3);
+        padding: var(--space-3) var(--space-6); border-radius: var(--panel-radius);
+        background: var(--color-surface); border: 1px solid var(--color-gold);
+        box-shadow: 0 10px 40px #ffc94d3d; animation: ab-in .35s cubic-bezier(.16, 1, .3, 1);
+      }
+      #achievement-banner .ab-icon { font-size: 1.6rem; }
+      #achievement-banner b { display: block; font-family: var(--font-display); }
+      #achievement-banner small { color: var(--color-text-muted); }
+      @keyframes ab-in {
+        from { opacity: 0; transform: translateX(-50%) translateY(-14px); }
+        to { opacity: 1; transform: translateX(-50%) translateY(0); }
+      }
+
+      .auth-row { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: center; }
+      .invite-hint { font-size: var(--text-xs); color: var(--color-text-muted); word-break: break-all; }
+      .invite-hint code { color: var(--color-primary); }
+
+      @media (width<=560px) {
+        .menu-panels { grid-template-columns: 1fr; }
+        .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      }
+    </style>
+    <script>
+      // Se o three.js (CDN) não carregar em 12s, avisa em vez de deixar a tela morta.
+      window.__orbitaBoot = setTimeout(function () {
+        if (window.__orbitaReady) return;
+        var fatal = document.getElementById("fatal");
+        if (fatal) fatal.hidden = false;
+      }, 12000);
+    </script>
+    <script type="module" src="./assets/game.js"></script>
+  </head>
+  <body>
+    <div id="app" aria-label="Área de jogo 3D"></div>
+
+    <!-- HUD -->
+    <div class="hud" id="hud" hidden>
+      <div class="hud-top">
+        <div class="panel hud-score">
+          <span class="hud-label">Pontuação</span>
+          <span class="hud-value" id="score">0</span>
+          <span class="hud-sub">Recorde <span id="best">0</span></span>
+        </div>
+        <div class="hud-actions">
+          <div class="panel hud-lives" id="lives" aria-label="Escudos restantes">
+            <svg viewBox="0 0 24 24" class="life" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3.5 8.7-7 11-3.5-2.3-7-6-7-11V5l7-3z"/></svg>
+            <svg viewBox="0 0 24 24" class="life" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3.5 8.7-7 11-3.5-2.3-7-6-7-11V5l7-3z"/></svg>
+            <svg viewBox="0 0 24 24" class="life" aria-hidden="true"><path d="M12 2l7 3v6c0 5-3.5 8.7-7 11-3.5-2.3-7-6-7-11V5l7-3z"/></svg>
+          </div>
+          <button class="icon-btn panel" id="btn-pause" aria-label="Pausar" title="Pausar (P)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM13 5h3v14h-3z"/></svg>
+          </button>
+          <button class="icon-btn panel" id="btn-mute" aria-label="Silenciar" title="Silenciar (M)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 010 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="hud-bottom">
+        <div class="hud-bottom-left">
+          <div class="chip panel" id="discord-badge" title="Estado da integração Discord">
+            <span class="dot" aria-hidden="true"></span><span id="discord-text">A iniciar…</span>
+          </div>
+          <div id="powerups" aria-label="Power-ups ativos"></div>
+        </div>
+        <div class="hud-bottom-right">
+          <div class="chip panel" id="combo" hidden title="Combo de coletas">
+            <span class="hud-label">Combo</span> <span class="hud-value" id="combo-mult">x1</span>
+          </div>
+          <div class="chip panel" id="speed-chip" title="Velocidade atual">
+            <span class="hud-label">Velocidade</span> <span class="hud-value" id="speed">0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Menu inicial -->
+    <div class="overlay" id="menu">
+      <div class="card panel">
+        <img class="splash" src="./splash.png" alt="Nave a atravessar um corredor espacial neon" width="880" height="330" />
+        <h1 class="title">Órbita Rush</h1>
+        <p class="subtitle">
+          Desvia-te dos asteroides, apanha orbes de energia e atravessa os portões dourados
+          neste corredor espacial sem fim.
+        </p>
+        <ul class="rules">
+          <li><span class="orb-dot" aria-hidden="true"></span> Orbe de energia <b>+25</b></li>
+          <li><span class="gate-dot" aria-hidden="true"></span> Portão dourado <b>+60</b></li>
+          <li><span class="ast-dot" aria-hidden="true"></span> Asteroide <b>−1 escudo</b></li>
+        </ul>
+        <ul class="rules">
+          <li><span class="pu-dot pu-shield" aria-hidden="true"></span> Escudo <b>extra</b></li>
+          <li><span class="pu-dot pu-slow" aria-hidden="true"></span> Câmera lenta</li>
+          <li><span class="pu-dot pu-x2" aria-hidden="true"></span> Pontos <b>×2</b></li>
+          <li><span class="pu-dot pu-magnet" aria-hidden="true"></span> Ímã de orbes</li>
+        </ul>
+        <button class="btn-primary" id="btn-start">Começar</button>
+        <p class="controls-hint">
+          <b>Setas / WASD</b> para mover · <b>arrastar</b> no telemóvel · <b>P</b> pausa · <b>M</b> som
+        </p>
+        <div class="menu-panels">
+          <div class="panel mini-panel">
+            <h3 class="mini-title">🏆 Conquistas</h3>
+            <ul class="achievements" id="achievements"></ul>
+          </div>
+          <div class="panel mini-panel">
+            <h3 class="mini-title">🚀 Melhores pontuações</h3>
+            <ol class="leaderboard" id="leaderboard"></ol>
+            <p class="hud-sub" id="menu-best">Recorde: 0</p>
+          </div>
+        </div>
+        <a class="btn-ghost discord-link" id="discord-link" href="#" target="_blank" rel="noopener">
+          💬 Entrar no Discord
+        </a>
+        <div class="auth-row">
+          <button class="btn-ghost discord-link" id="btn-discord-login">🔗 Ligar com Discord</button>
+          <button class="btn-ghost discord-link" id="btn-discord-logout" hidden>🚪 Sair</button>
+        </div>
+        <p class="controls-hint">
+          Ao <b>ligar com Discord</b>, o teu perfil aparece no badge e os membros do servidor
+          ganham a <b>skin dourada</b>.
+        </p>
+        <p class="invite-hint" id="invite-hint"></p>
+      </div>
+    </div>
+
+    <!-- Pausa -->
+    <div class="overlay" id="pause" hidden>
+      <div class="card panel small">
+        <h2 class="title-sm">Em pausa</h2>
+        <button class="btn-primary" id="btn-resume">Continuar</button>
+        <button class="btn-ghost" id="btn-quit">Voltar ao menu</button>
+      </div>
+    </div>
+
+    <!-- Fim de jogo -->
+    <div class="overlay" id="gameover" hidden>
+      <div class="card panel small">
+        <h2 class="title-sm">Nave destruída</h2>
+        <p class="final-label">Pontuação final</p>
+        <p class="final-score" id="final-score">0</p>
+        <p class="hud-sub" id="final-best">Recorde: 0</p>
+        <div class="stats-grid" id="final-stats"></div>
+        <div class="mini-panel" style="width:100%">
+          <h3 class="mini-title">🚀 Top 5</h3>
+          <ol class="leaderboard" id="final-leaderboard"></ol>
+        </div>
+        <button class="btn-primary" id="btn-restart">Jogar outra vez</button>
+        <button class="btn-ghost" id="btn-menu">Menu</button>
+        <a class="btn-ghost discord-link" id="discord-link-2" href="#" target="_blank" rel="noopener">
+          💬 Convite do Discord
+        </a>
+      </div>
+    </div>
+
+    <!-- Banner de conquista -->
+    <div id="achievement-banner" hidden>
+      <span class="ab-icon" aria-hidden="true">🏆</span>
+      <div>
+        <b id="ab-title">Conquista desbloqueada!</b>
+        <small id="ab-desc"></small>
+      </div>
+    </div>
+
+    <!-- Erro de carregamento (sem internet / CDN fora do ar) -->
+    <div class="overlay" id="fatal" hidden>
+      <div class="card panel small">
+        <h2 class="title-sm">Não consegui carregar o motor 3D</h2>
+        <p class="subtitle">
+          O Órbita Rush usa three.js pelo CDN. Confira a ligação à internet e recarregue a página.
+        </p>
+        <button class="btn-primary" onclick="location.reload()">Recarregar</button>
+      </div>
+    </div>
+
+    <div id="toast" aria-live="polite"></div>
+  </body>
+</html>
