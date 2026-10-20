@@ -20,9 +20,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 const CONFIG = {
   // Application ID do teu app no Discord Developer Portal.
   // Deixa vazio para jogar só no navegador (o badge mostra o estado).
-  clientId: '',
+  clientId: '1551238667492790352',
   // Convite do teu servidor Discord. O ?proof= é anexado automaticamente.
-  invite: 'https://discord.gg/SEU_CONVITE',
+  invite: 'https://discord.gg/9apTx4xyJQ',
   // ✅ Linha de prova do Discord Social SDK (Claim Your Game / Game Identity)
   proof: 'c7396932d0aee5ce',
   // ID do servidor (guild) — quem fizer login e for membro ganha a skin dourada.
